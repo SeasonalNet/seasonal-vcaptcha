@@ -17,4 +17,18 @@ if [[ -f "$BASE/venv/bin/activate" ]]; then
   . "$BASE/venv/bin/activate"
 fi
 
-exec python3 -m seasonal_vcaptcha.cli "$@"
+args=("$@")
+has_config=0
+for arg in "${args[@]}"; do
+  case "$arg" in
+    --config|--config=*)
+      has_config=1
+      ;;
+  esac
+done
+
+if [[ "$has_config" -eq 0 && -f /etc/seasonal-vcaptcha/config.yaml ]]; then
+  args=(--config /etc/seasonal-vcaptcha/config.yaml "${args[@]}")
+fi
+
+exec python3 -m seasonal_vcaptcha.cli "${args[@]}"
