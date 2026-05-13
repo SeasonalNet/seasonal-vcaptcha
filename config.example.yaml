@@ -1,0 +1,96 @@
+# Seasonal VCaptcha configuration
+
+service:
+  name: seasonal-vcaptcha
+  instance: default
+  user: seasonal-vcaptcha
+  group: seasonal-vcaptcha
+  runtime_dir: /run/seasonal-vcaptcha
+  state_dir: /var/lib/seasonal-vcaptcha
+  temp_dir: /tmp/seasonal-vcaptcha
+
+api:
+  enabled: true
+
+  # Preferred production listener for PBX-local integration.
+  unix_socket:
+    enabled: true
+    path: /run/seasonal-vcaptcha/seasonal-vcaptcha.sock
+    mode: "0660"
+    group: asterisk
+
+  # Optional development/debug listener. Keep disabled in production unless
+  # there is a specific local-only reason to enable it.
+  tcp:
+    enabled: false
+    bind: 127.0.0.1
+    port: 8765
+
+  request_timeout_seconds: 6
+  max_body_bytes: 10485760
+  max_concurrent_requests: 1
+
+recognizer:
+  engine: vosk
+
+  vosk:
+    model_path: /opt/seasonal-vcaptcha/models/model-small-en-us
+    sample_rate: 16000
+
+    # Keep recognition constrained for spoken digit CAPTCHA use.
+    grammar:
+      enabled: true
+      phrases:
+        - zero
+        - oh
+        - one
+        - two
+        - three
+        - four
+        - five
+        - six
+        - seven
+        - eight
+        - nine
+
+audio:
+  sox_path: /usr/bin/sox
+  target_sample_rate: 16000
+  target_channels: 1
+  target_encoding: signed-integer
+  target_bits: 16
+  max_duration_seconds: 10
+  cleanup_temp_files: true
+
+cli:
+  mode: auto        # auto, daemon, direct
+  format: digits   # digits, json, env
+  socket_path: /run/seasonal-vcaptcha/seasonal-vcaptcha.sock
+  timeout_seconds: 6
+  diagnostics_to_stderr: true
+
+recognition:
+  min_digits: 1
+  max_digits: 8
+  allow_empty_result: true
+  digit_aliases:
+    zero: "0"
+    oh: "0"
+    one: "1"
+    two: "2"
+    three: "3"
+    four: "4"
+    five: "5"
+    six: "6"
+    seven: "7"
+    eight: "8"
+    nine: "9"
+
+logging:
+  level: info
+  format: text
+  destination: stderr
+
+metrics:
+  enabled: false
+  path: /metrics

@@ -1,0 +1,22 @@
+[Unit]
+Description=Seasonal VCaptcha recognition daemon
+After=network.target
+
+[Service]
+Type=simple
+User=seasonal-vcaptcha
+Group=seasonal-vcaptcha
+RuntimeDirectory=seasonal-vcaptcha
+StateDirectory=seasonal-vcaptcha
+Environment=SEASONAL_VCAPTCHA_CONFIG=/etc/seasonal-vcaptcha/config.yaml
+ExecStart=/opt/seasonal-vcaptcha/venv/bin/seasonal-vcaptcha-daemon
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/run/seasonal-vcaptcha /var/lib/seasonal-vcaptcha /tmp/seasonal-vcaptcha
+
+[Install]
+WantedBy=multi-user.target

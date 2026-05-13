@@ -1,0 +1,8 @@
+; Example only. Adapt paths/context names to the live SeasonalPBX dialplan.
+;
+; The default CLI stdout is digit-only, which is the safest Asterisk contract.
+; stderr contains diagnostics and is captured by normal process/service logging.
+;
+; Example SHELL usage:
+; same => n,Set(CAPTCHA_RESULT=${SHELL(/opt/seasonal-vcaptcha/venv/bin/seasonal-vcaptcha-digits /var/spool/asterisk/tmp/captcha.wav)})
+; same => n,NoOp(VCaptcha result: ${CAPTCHA_RESULT})

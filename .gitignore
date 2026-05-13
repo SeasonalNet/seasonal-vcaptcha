@@ -1,11 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
 venv/
-__pycache__/
-*.pyc
-*.wav
-*.mono16.wav
-*.sln
-*.ulaw
+
+# Local config and runtime artifacts
+config.yaml
 *.log
+*.sock
+*.pid
+
+# Vosk models and generated audio
 model*/
 models/
+*.wav
+*.mono16.wav
+*.mp3
+*.flac
+*.ogg
+
+# Packaging/build artifacts
+build/
+dist/

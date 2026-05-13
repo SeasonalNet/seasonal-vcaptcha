@@ -1,8 +1,193 @@
 # seasonal-vcaptcha
 
-Small Vosk-powered spoken digit recognizer used by SeasonalPBX / FreePBX call flows.
+Small Vosk-powered spoken digit CAPTCHA recognizer used by SeasonalPBX / FreePBX call flows.
 
-This repository exists to preserve the working legacy CAPTCHA code from `FreePBX17` before the PBX is rebuilt as a cleaner `SeasonalPBX` VM.
+This repository started as a preservation import from the legacy `FreePBX17` VM. It is now structured as a small SeasonalNet service with a daemon-backed CLI boundary: Asterisk still calls a command and receives digit-only stdout by default, while the daemon can keep the Vosk model warm for lower latency.
+
+## Architecture
+
+```text
+Asterisk / FreePBX
+        │
+        ▼
+seasonal-vcaptcha-digits /path/to.wav
+        │
+        ▼
+local Unix-socket API daemon
+        │
+        ▼
+warm Vosk recognizer
+```
+
+The CLI supports three modes:
+
+- `auto`: try the daemon, then fall back to direct one-shot recognition
+- `daemon`: require the local daemon
+- `direct`: bypass the daemon and run recognition in the CLI process
+
+The default stdout format is digit-only for Asterisk safety.
+
+## Repository layout
+
+```text
+.
+├── AGENTS.md
+├── README.md
+├── config.example.yaml
+├── docs/
+├── examples/
+├── lib/seasonal_vcaptcha/
+│   ├── audio.py
+│   ├── cli.py
+│   ├── client.py
+│   ├── config.py
+│   ├── daemon.py
+│   ├── digits.py
+│   ├── protocol.py
+│   └── recognizer.py
+├── pyproject.toml
+├── requirements.txt
+├── requirements-dev.txt
+├── run_digits.sh
+├── tests/
+└── vosk_digits.py
+```
+
+The `run_digits.sh` and `vosk_digits.py` files are compatibility wrappers. New integrations should prefer the installed console scripts.
+
+## Dependencies
+
+System packages:
+
+```bash
+sudo apt install python3 python3-venv sox
+```
+
+Python packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+Development/test packages:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+## Installation pattern
+
+Example clean deployment path:
+
+```bash
+sudo install -d -o root -g root /opt/seasonal-vcaptcha
+cd /opt/seasonal-vcaptcha
+git clone https://git.seasonalnet.org/Seasonal_Currency/seasonal-vcaptcha.git .
+python3 -m venv venv
+. venv/bin/activate
+pip install -U pip
+pip install -e .
+```
+
+Place the Vosk model outside Git, for example:
+
+```text
+/opt/seasonal-vcaptcha/models/model-small-en-us
+```
+
+Do not commit model files, virtual environments, generated audio, or logs.
+
+## Configuration
+
+Copy the example config and adjust paths:
+
+```bash
+sudo install -d /etc/seasonal-vcaptcha
+sudo cp config.example.yaml /etc/seasonal-vcaptcha/config.yaml
+```
+
+Important defaults:
+
+```yaml
+api:
+  unix_socket:
+    enabled: true
+    path: /run/seasonal-vcaptcha/seasonal-vcaptcha.sock
+  tcp:
+    enabled: false
+
+cli:
+  mode: auto
+  format: digits
+
+recognizer:
+  engine: vosk
+  vosk:
+    model_path: /opt/seasonal-vcaptcha/models/model-small-en-us
+```
+
+`VOSK_MODEL` may override the configured model path for compatibility with the legacy deployment.
+
+## CLI usage
+
+Asterisk-safe default:
+
+```bash
+seasonal-vcaptcha-digits /path/to/input.wav
+```
+
+Example stdout:
+
+```text
+1234
+```
+
+JSON output for operators:
+
+```bash
+seasonal-vcaptcha-digits --format json /path/to/input.wav
+```
+
+Environment-style output:
+
+```bash
+seasonal-vcaptcha-digits --format env /path/to/input.wav
+```
+
+Force direct mode:
+
+```bash
+seasonal-vcaptcha-digits --mode direct /path/to/input.wav
+```
+
+Require daemon mode:
+
+```bash
+seasonal-vcaptcha-digits --mode daemon /path/to/input.wav
+```
+
+## Daemon usage
+
+Run manually for testing:
+
+```bash
+seasonal-vcaptcha-daemon --config /etc/seasonal-vcaptcha/config.yaml
+```
+
+The daemon exposes a local API by default:
+
+- `POST /v1/recognize`
+- `GET /healthz`
+- `GET /readyz`
+- `GET /metrics` when enabled
+
+Production integration should use the Unix socket, not a LAN-exposed TCP listener.
+
+A starter systemd unit is provided at:
+
+```text
+examples/systemd/seasonal-vcaptcha.service
+```
 
 ## Legacy source
 
@@ -16,131 +201,35 @@ The original working deployment lived on `FreePBX17` at:
 └── vosk_digits.py
 ```
 
-This repository tracks the code only. It intentionally does not track the Vosk model directory or Python virtual environment.
-
-## Tracked files
-
-Expected initial repository layout:
-
-```text
-.
-├── AGENTS.md
-├── README.md
-├── .gitignore
-├── requirements.txt
-├── run_digits.sh
-└── vosk_digits.py
-```
-
-## Runtime behavior
-
-The recognizer:
-
-- accepts a WAV file path as its first argument
-- converts nonconforming audio to mono 16-bit WAV using `sox`
-- loads a Vosk English model
-- constrains recognition to digit words and digit characters
-- maps `zero` and `oh` to `0`
-- prints only the recognized digits to stdout
-
-Example output:
-
-```text
-1234
-```
-
-## Dependencies
-
-System packages:
-
-```bash
-sudo apt install python3 python3-venv sox
-```
-
-Python package:
-
-```bash
-pip install -r requirements.txt
-```
-
-Initial `requirements.txt`:
-
-```text
-vosk
-```
-
-## Model path
-
-The legacy wrapper script expects the model at:
-
-```text
-/opt/vosk-stt/model-small-en-us
-```
-
-The Python script also supports overriding this with:
-
-```bash
-export VOSK_MODEL=/path/to/model
-```
-
-Do not commit model files to this repository.
-
-## Legacy usage
-
-From the deployed directory:
-
-```bash
-./run_digits.sh /path/to/input.wav
-```
-
-Or directly:
-
-```bash
-VOSK_MODEL=/opt/vosk-stt/model-small-en-us python3 ./vosk_digits.py /path/to/input.wav
-```
+This repository tracks code only. It intentionally does not track the Vosk model directory or Python virtual environment.
 
 ## FreePBX / Asterisk integration
 
-The exact dialplan call site should be documented after discovery from the old `FreePBX17` VM.
-
-Useful search commands:
+The exact dialplan call site should be confirmed from the live SeasonalPBX deployment. Useful search commands:
 
 ```bash
 sudo grep -RIn \
   -e 'vosk' \
   -e 'run_digits' \
   -e 'vosk_digits' \
+  -e 'vcaptcha' \
   -e 'captcha' \
   /etc/asterisk /var/lib/asterisk 2>/dev/null
 ```
 
-```bash
-sudo grep -RIn \
-  -e 'AGI' \
-  -e 'System' \
-  -e 'TrySystem' \
-  -e 'SHELL' \
-  /etc/asterisk/extensions_custom.conf \
-  /etc/asterisk/extensions_override_freepbx.conf \
-  /etc/asterisk/*.conf 2>/dev/null
+Example integration notes are in:
+
+```text
+examples/asterisk/extensions_custom.conf.example
 ```
 
-## Rebuild notes
-
-During the `FreePBX17` to `SeasonalPBX` rebuild, this repository is the source of truth for restoring the CAPTCHA code.
-
-Expected restore pattern:
+## Testing
 
 ```bash
-cd /opt
-git clone https://git.seasonalnet.org/Seasonal_Currency/seasonal-vcaptcha.git
-cd seasonal-vcaptcha
-python3 -m venv venv
-. venv/bin/activate
-pip install -r requirements.txt
+pytest
 ```
 
-Then ensure the Vosk model exists and the FreePBX/Asterisk dialplan calls the wrapper script.
+The default tests do not require a Vosk model. Real audio/model integration testing should be done on SeasonalPBX before replacing the legacy call-flow hook.
 
 ## Non-goals
 
@@ -153,5 +242,3 @@ This repository does not preserve:
 - Vosk model files
 - Python virtual environments
 - full VM state
-
-Those are handled separately during the PBX migration.
