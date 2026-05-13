@@ -1,0 +1,11 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.wav
+*.mono16.wav
+*.sln
+*.ulaw
+*.log
+model*/
+models/
