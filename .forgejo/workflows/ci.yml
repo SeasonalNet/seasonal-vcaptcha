@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 jobs:
@@ -14,15 +15,20 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3 python3-venv python3-pip
-          python3 -m venv .venv-ci
-          . .venv-ci/bin/activate
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ]; then pip install -e .; fi
-          if find . -maxdepth 3 -type d -name tests | grep -q .; then pip install pytest; fi
+          python3 -m venv .venv-bootstrap
+          . .venv-bootstrap/bin/activate
+          python -m pip install --upgrade pip uv==0.13.5
+          uv python install 3.15.1
+          uv venv --python 3.15.1 .venv-ci
+          if [ -f requirements.txt ]; then uv pip install --python .venv-ci/bin/python -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then uv pip install --python .venv-ci/bin/python -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ]; then uv pip install --python .venv-ci/bin/python -e .; fi
+          if find . -maxdepth 3 -type d -name tests | grep -q .; then uv pip install --python .venv-ci/bin/python pytest; fi
+      - name: Audit locked Python dependencies
+        run: uv audit --locked --preview-features audit-command
       - name: Compile Python sources
         run: |
+          . .venv-ci/bin/activate
           python3 - <<'PY'
           import compileall
           import pathlib
@@ -46,3 +52,51 @@ jobs:
           else
             echo "No tests directory found; compile check only."
           fi
+
+  publish-container:
+    name: Publish container image
+    needs: [python]
+    if: success() && forge.event_name == 'push' && (forge.ref == 'refs/heads/main' || startsWith(forge.ref, 'refs/tags/v'))
+    runs-on: [docker, slate-builder]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install Docker CLI and Buildx
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates curl
+          install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+          chmod a+r /etc/apt/keyrings/docker.asc
+          . /etc/os-release
+          test "$ID" = debian
+          printf '%s\n' \
+            "Types: deb" \
+            "URIs: https://download.docker.com/linux/debian" \
+            "Suites: $VERSION_CODENAME" \
+            "Components: stable" \
+            "Architectures: $(dpkg --print-architecture)" \
+            "Signed-By: /etc/apt/keyrings/docker.asc" \
+            > /etc/apt/sources.list.d/docker.sources
+          apt-get update
+          apt-get install --yes --no-install-recommends docker-ce-cli docker-buildx-plugin
+          docker version
+          docker buildx version
+      - name: Trust the SeasonalNet Harbor CA
+        run: update-ca-certificates
+      - name: Log in to Harbor
+        env:
+          HARBOR_CI_USERNAME: ${{ secrets.HARBOR_CI_USERNAME }}
+          HARBOR_CI_PASSWORD: ${{ secrets.HARBOR_CI_PASSWORD }}
+        run: printf '%s' "$HARBOR_CI_PASSWORD" | docker login registry.lan.seasonalnet.org --username "$HARBOR_CI_USERNAME" --password-stdin
+      - name: Build and push image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image=registry.lan.seasonalnet.org/seasonalnet/seasonal-vcaptcha
+          tags=(--tag "$image:sha-${GITHUB_SHA:0:12}")
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            tags+=(--tag "$image:latest")
+          else
+            tags+=(--tag "$image:$GITHUB_REF_NAME")
+          fi
+          docker buildx build --platform linux/amd64 --push "${tags[@]}" .

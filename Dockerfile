@@ -1,0 +1,37 @@
+FROM ghcr.io/astral-sh/uv:0.13.5 AS uv
+
+FROM python:3.15-slim@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS dependencies
+
+WORKDIR /build
+COPY --from=uv /uv /uvx /bin/
+COPY requirements.txt .
+RUN uv pip install --prefix=/install --no-cache -r requirements.txt
+
+FROM python:3.15-slim@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS runtime-files
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    SEASONAL_VCAPTCHA_CONFIG=/run/config/config.yaml \
+    VOSK_MODEL=/opt/seasonal-vcaptcha/models/model-small-en-us
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends libgomp1 sox \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 vcaptcha \
+    && useradd --system --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin vcaptcha \
+    && install -d -o 10001 -g 10001 -m 0700 /var/lib/seasonal-vcaptcha
+
+WORKDIR /app
+COPY --from=dependencies /install /usr/local
+COPY --chown=0:0 lib ./lib
+COPY --chown=0:0 pyproject.toml README.md ./
+RUN chmod -R go-w /app
+
+ENV PYTHONPATH=/app/lib
+FROM scratch AS runtime
+
+COPY --from=runtime-files / /
+WORKDIR /app
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/python3.15", "-m", "seasonal_vcaptcha.daemon"]
+RUN ["/usr/local/bin/python3.15", "-c", "import os; assert os.getuid() == 10001; assert os.stat('/app/lib/seasonal_vcaptcha/daemon.py').st_uid == 0; assert not os.access('/app', os.W_OK)"]

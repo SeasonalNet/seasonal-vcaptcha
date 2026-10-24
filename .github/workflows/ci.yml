@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install Python tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3 python3-venv python3-pip
+          python3 -m venv .venv-bootstrap
+          . .venv-bootstrap/bin/activate
+          python -m pip install --upgrade pip uv==0.13.5
+          uv python install 3.15.1
+          uv venv --python 3.15.1 .venv-ci
+          uv pip install --python .venv-ci/bin/python -r requirements.txt
+          uv pip install --python .venv-ci/bin/python -r requirements-dev.txt
+          uv pip install --python .venv-ci/bin/python -e .
+      - name: Audit locked Python dependencies
+        run: uv audit --locked --preview-features audit-command
+      - name: Compile Python sources
+        run: |
+          . .venv-ci/bin/activate
+          python -m compileall -q lib tests
+      - name: Run tests
+        run: |
+          . .venv-ci/bin/activate
+          python -m pytest
+
+  publish-container:
+    name: Publish container image
+    needs: [python]
+    if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push image
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%%/*}"
+          owner="$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')"
+          image="ghcr.io/$owner/seasonal-vcaptcha"
+          tags=(--tag "$image:sha-${GITHUB_SHA:0:12}")
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            tags+=(--tag "$image:latest")
+          else
+            tags+=(--tag "$image:$GITHUB_REF_NAME")
+          fi
+          docker buildx build --platform linux/amd64 --push "${tags[@]}" .

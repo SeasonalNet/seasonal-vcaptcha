@@ -1,0 +1,32 @@
+services:
+  seasonal-vcaptcha:
+    build: .
+    image: seasonal-vcaptcha:local
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    user: ${VCAPTCHA_UID:-10001}:${ASTERISK_GID:-10001}
+    volumes:
+      - type: bind
+        source: ${CONFIG_FILE:-./config.yaml}
+        target: /run/config/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MODEL_DIR:?set MODEL_DIR to the Vosk model directory}
+        target: /opt/seasonal-vcaptcha/models/model-small-en-us
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SOCKET_DIR:-/run/seasonal-vcaptcha}
+        target: /run/seasonal-vcaptcha
+        bind:
+          create_host_path: false

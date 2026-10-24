@@ -66,13 +66,14 @@ sudo apt install python3 python3-venv sox
 Python packages:
 
 ```bash
-pip install -r requirements.txt
+uv venv --python 3.15.1 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
 Development/test packages:
 
 ```bash
-pip install -r requirements-dev.txt
+uv pip install --python .venv/bin/python -r requirements-dev.txt
 ```
 
 ## Installation pattern
@@ -83,10 +84,8 @@ Example clean deployment path:
 sudo install -d -o root -g root /opt/seasonal-vcaptcha
 cd /opt/seasonal-vcaptcha
 git clone https://git.seasonalnet.org/Seasonal_Currency/seasonal-vcaptcha.git .
-python3 -m venv venv
-. venv/bin/activate
-pip install -U pip
-pip install -e .
+uv venv --python 3.15.1 venv
+uv pip install --python venv/bin/python -e .
 ```
 
 Place the Vosk model outside Git, for example:
@@ -96,6 +95,38 @@ Place the Vosk model outside Git, for example:
 ```
 
 Do not commit model files, virtual environments, generated audio, or logs.
+
+## Docker deployment
+
+The repository includes a hardened Compose service. Prepare the model and a
+host socket directory that the FreePBX/Asterisk process can access:
+
+```bash
+cp config.example.yaml config.yaml
+sudo install -d -o 10001 -g "$(getent group asterisk | cut -d: -f3)" -m 0770 /run/seasonal-vcaptcha
+```
+
+Set `MODEL_DIR` to the existing Vosk model directory and `ASTERISK_GID` to the
+host Asterisk group ID. In `config.yaml`, set `api.unix_socket.group: null` so
+the socket inherits the container process group. Then build and start the daemon:
+
+```bash
+MODEL_DIR=/opt/seasonal-vcaptcha/models/model-small-en-us \
+ASTERISK_GID="$(getent group asterisk | cut -d: -f3)" \
+docker compose up --build -d
+```
+
+The socket directory is bind-mounted at `/run/seasonal-vcaptcha`, so the host
+FreePBX integration can use the same socket path. The model is mounted
+read-only and remains outside the image and Git. The container runs as a
+non-root numeric user with a read-only root filesystem, all capabilities
+dropped, and no-new-privileges enabled.
+
+After the Python CI job passes, pushes to `main` publish `latest` and a
+commit-SHA tag. A `v*` tag publishes that version tag and its commit-SHA tag.
+Images go to `ghcr.io/<owner>/seasonal-vcaptcha` on GitHub and
+`registry.lan.seasonalnet.org/seasonalnet/seasonal-vcaptcha` on Forgejo.
+Pull requests do not publish images.
 
 ## Configuration
 
