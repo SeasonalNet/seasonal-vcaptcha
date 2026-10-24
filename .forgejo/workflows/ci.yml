@@ -11,6 +11,8 @@ jobs:
     runs-on: docker
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
       - name: Install Python tooling
         run: |
           apt-get update
@@ -25,7 +27,7 @@ jobs:
           if [ -f pyproject.toml ]; then uv pip install --python .venv-ci/bin/python -e .; fi
           if find . -maxdepth 3 -type d -name tests | grep -q .; then uv pip install --python .venv-ci/bin/python pytest; fi
       - name: Audit locked Python dependencies
-        run: uv audit --locked --preview-features audit-command
+        run: .venv-bootstrap/bin/uv audit --locked --preview-features audit-command
       - name: Compile Python sources
         run: |
           . .venv-ci/bin/activate
@@ -53,13 +55,23 @@ jobs:
             echo "No tests directory found; compile check only."
           fi
 
+      - name: Verify Git-derived version
+        run: |
+          case "${GITHUB_REF:-}" in
+            refs/tags/*) sh tools/version.sh --release "${GITHUB_REF#refs/tags/}" ;;
+            *) sh tools/version.sh ;;
+          esac
+          sh tools/test-version.sh
+
   publish-container:
     name: Publish container image
     needs: [python]
-    if: success() && forge.event_name == 'push' && (forge.ref == 'refs/heads/main' || startsWith(forge.ref, 'refs/tags/v'))
+    if: success() && forge.event_name == 'push' && startsWith(forge.ref, 'refs/tags/v')
     runs-on: [docker, slate-builder]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
       - name: Install Docker CLI and Buildx
         run: |
           apt-get update
@@ -93,10 +105,13 @@ jobs:
         run: |
           set -euo pipefail
           image=registry.lan.seasonalnet.org/seasonalnet/seasonal-vcaptcha
+          version="$(sh tools/version.sh --release "$GITHUB_REF_NAME")"
+          revision="$(sh tools/version.sh --revision)"
+          build_date="$(git show -s --format=%cI HEAD)"
+          image_tag="$(sh tools/version.sh --image-tag "$GITHUB_REF_NAME")"
           tags=(--tag "$image:sha-${GITHUB_SHA:0:12}")
-          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
-            tags+=(--tag "$image:latest")
-          else
-            tags+=(--tag "$image:$GITHUB_REF_NAME")
-          fi
-          docker buildx build --platform linux/amd64 --push "${tags[@]}" .
+          tags+=(--tag "$image:$image_tag")
+          docker buildx build --platform linux/amd64 --push \
+            --build-arg "APP_VERSION=$version" \
+            --build-arg "APP_REVISION=$revision" \
+            --build-arg "APP_BUILD_DATE=$build_date" "${tags[@]}" .

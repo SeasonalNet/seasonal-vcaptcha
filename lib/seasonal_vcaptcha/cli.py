@@ -9,6 +9,7 @@ from pathlib import Path
 from .client import DaemonUnavailable, recognize_via_unix_socket
 from .config import load_config
 from .protocol import RecognizeResponse, error_response
+from . import __version__
 from .recognizer import VoskRecognizer
 
 MODE_CHOICES = ("auto", "daemon", "direct")
@@ -26,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="seasonal-vcaptcha-digits",
         description="Recognize spoken CAPTCHA digits from a WAV file.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("wav_path", help="path to the recorded WAV file")
     parser.add_argument("--config", help="path to config.yaml")
     parser.add_argument("--mode", choices=MODE_CHOICES, help="recognition mode")

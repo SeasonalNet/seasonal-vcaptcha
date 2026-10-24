@@ -2,10 +2,16 @@ FROM ghcr.io/astral-sh/uv:0.13.5 AS uv
 
 FROM python:3.15-slim@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS dependencies
 
+ARG APP_VERSION=0.0.0+unknown
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEASONAL_VCAPTCHA=${APP_VERSION}
+
 WORKDIR /build
 COPY --from=uv /uv /uvx /bin/
 COPY requirements.txt .
-RUN uv pip install --prefix=/install --no-cache -r requirements.txt
+COPY pyproject.toml README.md ./
+COPY lib ./lib
+RUN uv pip install --prefix=/install --no-cache -r requirements.txt \
+    && uv pip install --prefix=/install --no-cache --no-deps .
 
 FROM python:3.15-slim@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS runtime-files
 
@@ -23,15 +29,17 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=dependencies /install /usr/local
-COPY --chown=0:0 lib ./lib
-COPY --chown=0:0 pyproject.toml README.md ./
 RUN chmod -R go-w /app
-
-ENV PYTHONPATH=/app/lib
 FROM scratch AS runtime
 
 COPY --from=runtime-files / /
 WORKDIR /app
 USER 10001:10001
+ARG APP_VERSION=0.0.0+unknown
+ARG APP_REVISION=unknown
+ARG APP_BUILD_DATE=unknown
+LABEL org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$APP_REVISION" \
+      org.opencontainers.image.created="$APP_BUILD_DATE"
 ENTRYPOINT ["/usr/local/bin/python3.15", "-m", "seasonal_vcaptcha.daemon"]
 RUN ["/usr/local/bin/python3.15", "-c", "import os; assert os.getuid() == 10001; assert os.stat('/app/lib/seasonal_vcaptcha/daemon.py').st_uid == 0; assert not os.access('/app', os.W_OK)"]

@@ -1,6 +1,11 @@
 services:
   seasonal-vcaptcha:
-    build: .
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-0.0.0+unknown}
+        APP_REVISION: ${APP_REVISION:-unknown}
+        APP_BUILD_DATE: ${APP_BUILD_DATE:-unknown}
     image: seasonal-vcaptcha:local
     restart: unless-stopped
     init: true
