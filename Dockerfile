@@ -42,4 +42,4 @@ LABEL org.opencontainers.image.version="$APP_VERSION" \
       org.opencontainers.image.revision="$APP_REVISION" \
       org.opencontainers.image.created="$APP_BUILD_DATE"
 ENTRYPOINT ["/usr/local/bin/python3.15", "-m", "seasonal_vcaptcha.daemon"]
-RUN ["/usr/local/bin/python3.15", "-c", "import os; assert os.getuid() == 10001; assert os.stat('/app/lib/seasonal_vcaptcha/daemon.py').st_uid == 0; assert not os.access('/app', os.W_OK)"]
+RUN ["/usr/local/bin/python3.15", "-c", "import os; assert os.getuid() == 10001; assert os.stat('/usr/local/lib/python3.15/site-packages/seasonal_vcaptcha/daemon.py').st_uid == 0; assert not os.access('/app', os.W_OK)"]

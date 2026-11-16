@@ -66,7 +66,7 @@ sudo apt install python3 python3-venv sox
 Python packages:
 
 ```bash
-uv venv --python 3.15.1 .venv
+uv venv --python 3.15.2 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
@@ -84,7 +84,7 @@ Example clean deployment path:
 sudo install -d -o root -g root /opt/seasonal-vcaptcha
 cd /opt/seasonal-vcaptcha
 git clone https://git.seasonalnet.org/Seasonal_Currency/seasonal-vcaptcha.git .
-uv venv --python 3.15.1 venv
+uv venv --python 3.15.2 venv
 uv pip install --python venv/bin/python -e .
 ```
 
