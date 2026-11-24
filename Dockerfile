@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:0.13.9 AS uv
 
-FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS dependencies
+FROM python:3.15-slim@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2132f5d473a8a5 AS dependencies
 
 ARG APP_VERSION=0.0.0+unknown
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEASONAL_VCAPTCHA=${APP_VERSION}
@@ -13,7 +13,7 @@ COPY lib ./lib
 RUN uv pip install --prefix=/install --no-cache -r requirements.txt \
     && uv pip install --prefix=/install --no-cache --no-deps .
 
-FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime-files
+FROM python:3.15-slim@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2132f5d473a8a5 AS runtime-files
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
