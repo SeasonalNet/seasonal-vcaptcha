@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.13.9 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.10 AS uv
 
 FROM python:3.15-slim@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2132f5d473a8a5 AS dependencies
 
